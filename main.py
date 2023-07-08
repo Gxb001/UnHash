@@ -1,107 +1,75 @@
 import hashlib
-from faker import Faker
-from tqdm import tqdm
+import logging
 import random
 import string
+import time
+from tqdm import tqdm
 
-def generer_mot():
-    fake = Faker(['fr_FR', 'en_US'])
 
-    if random.choices([True, False], weights=[1, 1])[0]:
-        mot = fake.word()
+def load_common_passwords(file_path):
+    with open(file_path, 'r') as file:
+        common_passwords = [line.strip() for line in file]
+    return common_passwords
+
+
+common_passwords = load_common_passwords('mots.txt')
+
+
+def generate_password():
+    length = random.randint(4, 12)
+    characters = string.ascii_letters + string.digits + string.punctuation
+    password = random.choice(common_passwords) if random.randint(0, 10) < 3 else ''.join(random.choice(characters) for _ in range(length))
+    return password
+
+
+def hash_password(password, algorithm):
+    if algorithm == 'md5':
+        hashed_password = hashlib.md5(password.encode()).hexdigest()
+    elif algorithm == 'sha1':
+        hashed_password = hashlib.sha1(password.encode()).hexdigest()
+    elif algorithm == 'sha256':
+        hashed_password = hashlib.sha256(password.encode()).hexdigest()
+    elif algorithm == 'sha512':
+        hashed_password = hashlib.sha512(password.encode()).hexdigest()
+    elif algorithm == 'sha3_256':  # Algorithme SHA-3 256
+        hashed_password = hashlib.sha3_256(password.encode()).hexdigest()
     else:
-        mot = fake.unique.word()
-
-        if random.choices([True, False], weights=[1, 1])[0]:
-            nombre = fake.random_int(0, 99)
-            mot += str(nombre)
-
-    return mot
+        raise ValueError('Invalid algorithm specified')
+    return hashed_password
 
 
-def generer_mot_de_passe(longueur):
-    fake = Faker(['fr_FR', 'en_US'])
+def compare_hashes(num_tests, target_hash):
+    logging.basicConfig(filename='./logs.log', level=logging.INFO,
+                        format='%(asctime)s - %(message)s',
+                        datefmt='%Y-%m-%d %H:%M:%S')
+    logger = logging.getLogger()
 
-    caracteres = string.ascii_letters + string.digits + string.punctuation
+    start_time = time.time()
+    found = False
+    with tqdm(total=num_tests) as pbar:
+        for _ in range(num_tests):
+            password = generate_password()
+            algorithms = ['md5', 'sha1', 'sha256', 'sha512', 'sha3_256']
+            log_message = f"Testing password: {password} with algorithm: {algorithms}"
+            logger.info(log_message)
+            for algorithm in algorithms:
+                hashed_password = hash_password(password, algorithm)
+                if str(hashed_password) == target_hash:
+                    found = True
+                    break
+            if found:
+                break
+            #pbar.set_postfix({'Password': password})
+            pbar.update(1)
 
-    mots = []
-    mots.append(fake.unique.word())
-
-    while len(''.join(mots)) < longueur:
-        mot = fake.word()
-        mots.append(mot)
-
-        if random.choices([True, False], weights=[1, 1])[0]:
-            nombre = fake.random_int(0, 99)
-            mots.append(str(nombre))
-
-    mot_de_passe = ''.join(mots)
-    mot_de_passe = ''.join(random.sample(mot_de_passe, len(mot_de_passe)))  # Mélanger les caractères
-
-    mot_de_passe = ''.join(random.choice(caracteres) if c.isalpha() else c for c in mot_de_passe)
-
-    return mot_de_passe[:longueur]
-
-
-def lire_mots_et_verifier_empreinte(mot, empreintes):
-    algorithmes_hachage = ['md5', 'sha1', 'sha256']
-    for algo, empreinte in empreintes.items():
-        h = hashlib.new(algo)
-        h.update(mot.encode('utf-8'))
-        empreinte_calculée = h.hexdigest()
-        if empreinte_calculée == empreinte:
-            return (True, mot, algo)
-    return (False, "", "")
+    if found:
+        print(f"\nFound matching password: {password}")
+    else:
+        print("\nNo matching password found.")
 
 
-def executer_generateur(n, hash):
-    total_iterations = n
-    progress_bar = tqdm(total=total_iterations, ncols=100)
-
-    mots = set()
-    empreintes = {}
-
-    count = 0
-    while count < total_iterations:
-        if random.choices([True, False], weights=[1, 1])[0]:
-            mot = generer_mot()
-            ok = lire_mots_et_verifier_empreinte(mot, empreintes)
-        else:
-            rdm = random.randint(4, 12)
-            mot_de_passe = generer_mot_de_passe(rdm)
-            ok = lire_mots_et_verifier_empreinte(mot_de_passe, empreintes)
-
-        count += 1
-        progress_bar.update(1)
-        progress_bar.set_description("Progression")
-        if ok[0]:
-            print(f"L'empreinte du mot '{ok[1]}' correspond à l'empreinte fournie avec l'algorithme {ok[2]}.")
-            break
-        elif count == total_iterations:
-            print("Aucun mot n'a été trouvé pour cette empreinte.")
-            break
-
-    progress_bar.close()
-
-
-def hasher_mot_de_passe(mot_de_passe):  # sha256
-    hasher = hashlib.sha256()
-    hasher.update(mot_de_passe.encode('utf-8'))
-    mot_de_passe_hashe = hasher.hexdigest()
-    return mot_de_passe_hashe
-
-
-# Exemple d'exécution avec 5 générations
-# print(hasher_mot_de_passe("hello71"))
-
-
-
-empreintes = {
-    'md5': hash,
-    'sha1': hash,
-    'sha256': hash
-}
-hash = input("Quel est le hash à tester : ")
-nb = int(input("Combien de mots de passe voulez-vous tester : "))
-executer_generateur(nb, empreintes)
-#print(hasher_mot_de_passe("Uhgè7_"))
+# Exemple d'utilisation des fonctions
+if __name__ == '__main__':
+    num_tests = int(input("Combien de mots de passe souhaitez-vous tester ? "))
+    target_hash = input("Entrez l'empreinte à comparer : ")
+    compare_hashes(num_tests, str(target_hash))
